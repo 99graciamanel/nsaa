@@ -5,7 +5,8 @@ const LocalStrategy = require('passport-local').Strategy
 const JwtStrategy = require('passport-jwt').Strategy
 const ExtractJwt = require('passport-jwt').ExtractJwt
 const jwt = require('jsonwebtoken')
-var cookieParser = require('cookie-parser')
+const fortune = require('fortune-teller')
+const cookieParser = require('cookie-parser')
 
 const port = 3000
 const jwtSecret = require('crypto').randomBytes(16) // 16*8= 256 random bits
@@ -57,9 +58,10 @@ app.use(express.urlencoded({extended: true})) // needed to retrieve html form fi
 app.use(passport.initialize())  // we load the passport auth middleware to our express application. It should be loaded before any route.
 
 app.get('/',
-    passport.authenticate('jwt', {session: false}),
+    passport.authenticate('jwt', {failureRedirect: '/login', session: false}),
     (req, res) => {
-        res.send('hello world')
+        var r = fortune.fortune()
+        res.send(r)
     })
 
 app.get('/login',
@@ -82,17 +84,27 @@ app.post('/login',
 
         // generate a signed json web token. By default the signing algorithm is HS256 (HMAC-SHA256), i.e. we will 'sign' with a symmetric secret
         const token = jwt.sign(jwtClaims, jwtSecret)
-        res.cookie("session", token, {
+        res.cookie('session', token, {
             httpOnly: false,
             secure: false,
-        }).json(token)
+        })
         // Just for testing, send the JWT directly to the browser. Later on we should send the token inside a cookie.
 
         // And let us log a link to the jwt.iot debugger, for easy checking/verifying:
         console.log(`Token sent. Debug at https://jwt.io/?value=${token}`)
         console.log(`Token secret (for verifying the signature): ${jwtSecret.toString('base64')}`)
+
+        res.redirect('/')
     }
 )
+
+app.get('/logout',
+    passport.authenticate('jwt', {session: false}),
+    (req, res) => {
+        res.clearCookie('session');
+        res.redirect('/');
+        res.end();
+    })
 
 app.get('/profile',
     passport.authenticate('jwt', {session: false}),
