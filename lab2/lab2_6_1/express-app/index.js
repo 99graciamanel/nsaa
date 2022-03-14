@@ -1,20 +1,46 @@
 const express = require('express')
 const logger = require('morgan')
+
 const passport = require('passport')
 const LocalStrategy = require('passport-local').Strategy
 const JwtStrategy = require('passport-jwt').Strategy
 const ExtractJwt = require('passport-jwt').ExtractJwt
 const jwt = require('jsonwebtoken')
-const fortune = require('fortune-teller')
 const cookieParser = require('cookie-parser')
+const jwtSecret = require('crypto').randomBytes(16) // 16*8= 256 random bits
 
-const port = 3000
+const fortune = require('fortune-teller')
 
 const fs = require('fs');
-const certificate = fs.readFileSync('./tls/webserver.key.pem');
+const tlsServerKey = fs.readFileSync('./tls/webserver.key.pem');
+const tlsServerCrt = fs.readFileSync('./tls/webserver.crt.pem');
 
-const app = express()
-app.use(logger('dev'))
+const https = require('https');
+const httpsOptions = {
+    key: tlsServerKey,
+    cert: tlsServerCrt
+};
+
+const app = express();
+const server = https.createServer(httpsOptions, app);
+/**
+ * Listen on provided port, on all network interfaces.
+ */
+server.listen(8443);
+server.on('listening', onListening);
+
+/**
+ * Event listener for HTTP server "listening" event.
+ */
+function onListening() {
+    const addr = server.address();
+    const bind = typeof addr === 'string'
+        ? 'pipe ' + addr
+        : 'port ' + addr.port;
+    console.log('Listening on ' + bind);
+}
+
+app.use(logger('dev'));
 app.use(cookieParser());
 
 passport.use('local',
@@ -40,7 +66,7 @@ passport.use('jwt',
     new JwtStrategy(
         {
             jwtFromRequest: ExtractJwt.fromExtractors([(req) => req.cookies.session]),
-            secretOrKey: certificate,
+            secretOrKey: jwtSecret,
             issuer: 'localhost:3000',
             audience: 'localhost:3000'
         },
@@ -85,7 +111,7 @@ app.post('/login',
         }
 
         // generate a signed json web token. By default the signing algorithm is HS256 (HMAC-SHA256), i.e. we will 'sign' with a symmetric secret
-        const token = jwt.sign(jwtClaims, certificate)
+        const token = jwt.sign(jwtClaims, jwtSecret)
         res.cookie('session', token, {
             httpOnly: false,
             secure: false,
@@ -94,7 +120,7 @@ app.post('/login',
 
         // And let us log a link to the jwt.iot debugger, for easy checking/verifying:
         console.log(`Token sent. Debug at https://jwt.io/?value=${token}`)
-        console.log(`Token secret (for verifying the signature): ${certificate.toString('base64')}`)
+        console.log(`Token secret (for verifying the signature): ${jwtSecret.toString('base64')}`)
 
         res.redirect('/')
     }
@@ -119,9 +145,4 @@ app.use(
     function (err, req, res, next) {
         console.error(err.stack)
         res.status(500).send('Something broke!')
-    })
-
-app.listen(port,
-    () => {
-        console.log(`Example app listening at http://localhost:${port}`)
     })
