@@ -9,7 +9,9 @@ const fortune = require('fortune-teller')
 const cookieParser = require('cookie-parser')
 
 const port = 3000
-const jwtSecret = require('crypto').randomBytes(16) // 16*8= 256 random bits
+
+const fs = require('fs');
+const certificate = fs.readFileSync('./tls/webserver.key.pem');
 
 const app = express()
 app.use(logger('dev'))
@@ -38,7 +40,7 @@ passport.use('jwt',
     new JwtStrategy(
         {
             jwtFromRequest: ExtractJwt.fromExtractors([(req) => req.cookies.session]),
-            secretOrKey: jwtSecret,
+            secretOrKey: certificate,
             issuer: 'localhost:3000',
             audience: 'localhost:3000'
         },
@@ -83,7 +85,7 @@ app.post('/login',
         }
 
         // generate a signed json web token. By default the signing algorithm is HS256 (HMAC-SHA256), i.e. we will 'sign' with a symmetric secret
-        const token = jwt.sign(jwtClaims, jwtSecret)
+        const token = jwt.sign(jwtClaims, certificate)
         res.cookie('session', token, {
             httpOnly: false,
             secure: false,
@@ -92,7 +94,7 @@ app.post('/login',
 
         // And let us log a link to the jwt.iot debugger, for easy checking/verifying:
         console.log(`Token sent. Debug at https://jwt.io/?value=${token}`)
-        console.log(`Token secret (for verifying the signature): ${jwtSecret.toString('base64')}`)
+        console.log(`Token secret (for verifying the signature): ${certificate.toString('base64')}`)
 
         res.redirect('/')
     }
