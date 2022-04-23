@@ -1,13 +1,17 @@
-const express = require('express')
-const logger = require('morgan')
+require('dotenv').config();
 
-const passport = require('passport')
-const LocalStrategy = require('passport-local').Strategy
-const JwtStrategy = require('passport-jwt').Strategy
-const ExtractJwt = require('passport-jwt').ExtractJwt
-const jwt = require('jsonwebtoken')
-const cookieParser = require('cookie-parser')
-const jwtSecret = require('crypto').randomBytes(16) // 16*8= 256 random bits
+const express = require('express');
+const cookieParser = require('cookie-parser');
+const session = require('express-session');
+const passport = require('passport');
+const logger = require('morgan');
+
+const GoogleStrategy = require('passport-google-oidc');
+const ensureLogIn = require('connect-ensure-login').ensureLoggedIn;
+const ensureLoggedIn = ensureLogIn();
+
+const SQLiteStore = require('connect-sqlite3')(session);
+const db = require('./db');
 
 const fortune = require('fortune-teller')
 
@@ -41,105 +45,100 @@ function onListening() {
 }
 
 app.use(logger('dev'));
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 
-passport.use('local',
-    new LocalStrategy(
-        {
-            usernameField: 'username',  // it MUST match the name of the input field for the username in the login HTML formulary
-            passwordField: 'password',  // it MUST match the name of the input field for the password in the login HTML formulary
-            session: false // we will store a JWT in the cookie with all the required session data. Our server does not need to keep a session, it's going to be stateless
-        },
-        function (username, password, done) {
-            if (username === 'walrus' && password === 'walrus') {
-                const user = {
-                    username: 'walrus',
-                    description: 'the only user that deserves to contact the fortune teller'
-                }
-                return done(null, user) // the first argument for done is the error, if any. In our case there is no error, and so we pass null. The object user will be added by the passport middleware to req.user and thus will be available there for the next middleware and/or the route handler
-            }
-            return done(null, false)  // in passport returning false as the user object means that the authentication process failed.
+app.use(session({
+    secret: 'keyboard cat',
+    resave: false, // don't save session if unmodified
+    saveUninitialized: false, // don't create session until something stored
+    store: new SQLiteStore({ db: 'sessions.db', dir: './var/db' })
+}));
+app.use(passport.authenticate('session'));
+
+app.use(function(req, res, next) {
+    var msgs = req.session.messages || [];
+    res.locals.messages = msgs;
+    res.locals.hasMessages = !! msgs.length;
+    req.session.messages = [];
+    next();
+});
+
+passport.use(new GoogleStrategy({
+    clientID: process.env['GOOGLE_CLIENT_ID'],
+    clientSecret: process.env['GOOGLE_CLIENT_SECRET'],
+    callbackURL: '/oauth2/redirect/google',
+    scope: [ 'profile' ]
+}, function verify(issuer, profile, cb) {
+    db.get('SELECT * FROM federated_credentials WHERE provider = ? AND subject = ?', [
+        issuer,
+        profile.id
+    ], function(err, row) {
+        if (err) { return cb(err); }
+        if (!row) {
+            db.run('INSERT INTO users (name) VALUES (?)', [
+                profile.displayName
+            ], function(err) {
+                if (err) { return cb(err); }
+                var id = this.lastID;
+                db.run('INSERT INTO federated_credentials (user_id, provider, subject) VALUES (?, ?, ?)', [
+                    id,
+                    issuer,
+                    profile.id
+                ], function(err) {
+                    if (err) { return cb(err); }
+                    var user = {
+                        id: id,
+                        name: profile.displayName
+                    };
+                    return cb(null, user);
+                });
+            });
+        } else {
+            db.get('SELECT * FROM users WHERE id = ?', [ row.user_id ], function(err, row) {
+                if (err) { return cb(err); }
+                if (!row) { return cb(null, false); }
+                return cb(null, row);
+            });
         }
-    ))
+    });
+}));
 
-passport.use('jwt',
-    new JwtStrategy(
-        {
-            jwtFromRequest: ExtractJwt.fromExtractors([(req) => req.cookies.session]),
-            secretOrKey: jwtSecret,
-            issuer: 'localhost:3000',
-            audience: 'localhost:3000'
-        },
-        function (jwt_payload, done) {
-            if (jwt_payload.sub === 'walrus') {
-                const user = {
-                    username: 'walrus',
-                    description: 'the only user that deserves to contact the fortune teller'
-                }
-                return done(null, user) // the first argument for done is the error, if any. In our case there is no error, and so we pass null. The object user will be added by the passport middleware to req.user and thus will be available there for the next middleware and/or the route handler
-            }
-            return done(null, false)
-        }
-    ))
+passport.serializeUser(function(user, cb) {
+    process.nextTick(function() {
+        cb(null, { id: user.id, username: user.username, name: user.name });
+    });
+});
 
-app.use(express.urlencoded({extended: true})) // needed to retrieve html form fields (it's a requirement of the local strategy)
-app.use(passport.initialize())  // we load the passport auth middleware to our express application. It should be loaded before any route.
-
-app.get('/',
-    passport.authenticate('jwt', {failureRedirect: '/login', session: false}),
-    (req, res) => {
-        var r = fortune.fortune()
-        res.send(r)
-    })
+passport.deserializeUser(function(user, cb) {
+    process.nextTick(function() {
+        return cb(null, user);
+    });
+});
 
 app.get('/login',
     (req, res) => {
         res.sendFile('login.html', {root: __dirname})
     })
 
-app.post('/login',
-    passport.authenticate('local', {failureRedirect: '/login', session: false}),
+app.get('/login/google', passport.authenticate('google'));
+
+app.get('/oauth2/redirect/google', passport.authenticate('google', {
+    successReturnToOrRedirect: '/',
+    failureRedirect: '/login'
+}));
+
+app.get('/logout', function(req, res, next) {
+    req.logout();
+    res.redirect('/');
+});
+
+app.get('/', ensureLoggedIn,
     (req, res) => {
-        // we should create here the JWT for the fortune teller and send it to the user agent inside a cookie.
-        // This is what ends up in our JWT
-        const jwtClaims = {
-            sub: req.user.username,
-            iss: 'localhost:3000',
-            aud: 'localhost:3000',
-            exp: Math.floor(Date.now() / 1000) + 604800, // 1 week (7×24×60×60=604800s) from now
-            role: 'user' // just to show a private JWT field
-        }
-
-        // generate a signed json web token. By default the signing algorithm is HS256 (HMAC-SHA256), i.e. we will 'sign' with a symmetric secret
-        const token = jwt.sign(jwtClaims, jwtSecret)
-        res.cookie('session', token, {
-            httpOnly: false,
-            secure: false,
-        })
-        // Just for testing, send the JWT directly to the browser. Later on we should send the token inside a cookie.
-
-        // And let us log a link to the jwt.iot debugger, for easy checking/verifying:
-        console.log(`Token sent. Debug at https://jwt.io/?value=${token}`)
-        console.log(`Token secret (for verifying the signature): ${jwtSecret.toString('base64')}`)
-
-        res.redirect('/')
-    }
-)
-
-app.get('/logout',
-    passport.authenticate('jwt', {session: false}),
-    (req, res) => {
-        res.clearCookie('session');
-        res.redirect('/');
-        res.end();
+        var r = fortune.fortune()
+        res.send(r)
     })
-
-app.get('/profile',
-    passport.authenticate('jwt', {session: false}),
-    function (req, res) {
-        res.json(req.user.username);
-    }
-);
 
 app.use(
     function (err, req, res, next) {

@@ -1,9 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="lab2_7_6" type="NodeJSConfigurationType" path-to-js-file="index.js" working-dir="$PROJECT_DIR$/lab2/lab2_7_6/express-app">
-    <envs>
-      <env name="client_id" value="580662669112-iren20altk7r3rfmreiuclt8om4bagsk.apps.googleusercontent.com" />
-      <env name="client_secret" value="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" />
-    </envs>
+  <configuration default="false" name="lab2_7_5-6" type="NodeJSConfigurationType" path-to-js-file="index.js" working-dir="$PROJECT_DIR$/lab2/lab2_7_5-6/express-app">
     <method v="2" />
   </configuration>
 </component>
