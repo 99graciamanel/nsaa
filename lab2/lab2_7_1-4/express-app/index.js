@@ -23,9 +23,7 @@ const httpsOptions = {
 
 const app = express();
 const server = https.createServer(httpsOptions, app);
-/**
- * Listen on provided port, on all network interfaces.
- */
+
 server.listen(8443);
 server.on('listening', onListening);
 
@@ -42,13 +40,14 @@ function onListening() {
 
 app.use(logger('dev'));
 app.use(cookieParser());
+app.use(express.urlencoded({extended: true}))
 
 passport.use('local',
     new LocalStrategy(
         {
-            usernameField: 'username',  // it MUST match the name of the input field for the username in the login HTML formulary
-            passwordField: 'password',  // it MUST match the name of the input field for the password in the login HTML formulary
-            session: false // we will store a JWT in the cookie with all the required session data. Our server does not need to keep a session, it's going to be stateless
+            usernameField: 'username',
+            passwordField: 'password',
+            session: false
         },
         function (username, password, done) {
             if (username === 'walrus' && password === 'walrus') {
@@ -56,9 +55,9 @@ passport.use('local',
                     username: 'walrus',
                     description: 'the only user that deserves to contact the fortune teller'
                 }
-                return done(null, user) // the first argument for done is the error, if any. In our case there is no error, and so we pass null. The object user will be added by the passport middleware to req.user and thus will be available there for the next middleware and/or the route handler
+                return done(null, user)
             }
-            return done(null, false)  // in passport returning false as the user object means that the authentication process failed.
+            return done(null, false)
         }
     ))
 
@@ -67,30 +66,22 @@ passport.use('jwt',
         {
             jwtFromRequest: ExtractJwt.fromExtractors([(req) => req.cookies.session]),
             secretOrKey: jwtSecret,
-            issuer: 'localhost:3000',
-            audience: 'localhost:3000'
+            issuer: 'localhost:8443',
+            audience: 'localhost:8443'
         },
         function (jwt_payload, done) {
-            if (jwt_payload.sub === 'walrus') {
+            if (jwt_payload.sub !== null) {
                 const user = {
-                    username: 'walrus',
+                    username: jwt_payload.sub,
                     description: 'the only user that deserves to contact the fortune teller'
                 }
-                return done(null, user) // the first argument for done is the error, if any. In our case there is no error, and so we pass null. The object user will be added by the passport middleware to req.user and thus will be available there for the next middleware and/or the route handler
+                return done(null, user)
             }
             return done(null, false)
         }
     ))
 
-app.use(express.urlencoded({extended: true})) // needed to retrieve html form fields (it's a requirement of the local strategy)
-app.use(passport.initialize())  // we load the passport auth middleware to our express application. It should be loaded before any route.
-
-app.get('/',
-    passport.authenticate('jwt', {failureRedirect: '/login', session: false}),
-    (req, res) => {
-        var r = fortune.fortune()
-        res.send(r)
-    })
+app.use(passport.initialize())
 
 app.get('/login',
     (req, res) => {
@@ -100,25 +91,20 @@ app.get('/login',
 app.post('/login',
     passport.authenticate('local', {failureRedirect: '/login', session: false}),
     (req, res) => {
-        // we should create here the JWT for the fortune teller and send it to the user agent inside a cookie.
-        // This is what ends up in our JWT
         const jwtClaims = {
             sub: req.user.username,
-            iss: 'localhost:3000',
-            aud: 'localhost:3000',
+            iss: 'localhost:8443',
+            aud: 'localhost:8443',
             exp: Math.floor(Date.now() / 1000) + 604800, // 1 week (7×24×60×60=604800s) from now
-            role: 'user' // just to show a private JWT field
+            role: 'user'
         }
 
-        // generate a signed json web token. By default the signing algorithm is HS256 (HMAC-SHA256), i.e. we will 'sign' with a symmetric secret
         const token = jwt.sign(jwtClaims, jwtSecret)
         res.cookie('session', token, {
             httpOnly: false,
             secure: false,
         })
-        // Just for testing, send the JWT directly to the browser. Later on we should send the token inside a cookie.
 
-        // And let us log a link to the jwt.iot debugger, for easy checking/verifying:
         console.log(`Token sent. Debug at https://jwt.io/?value=${token}`)
         console.log(`Token secret (for verifying the signature): ${jwtSecret.toString('base64')}`)
 
@@ -132,6 +118,13 @@ app.get('/logout',
         res.clearCookie('session');
         res.redirect('/');
         res.end();
+    })
+
+app.get('/',
+    passport.authenticate('jwt', {failureRedirect: '/login', session: false}),
+    (req, res) => {
+        var r = fortune.fortune()
+        res.send(r)
     })
 
 app.get('/profile',
