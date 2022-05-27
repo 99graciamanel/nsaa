@@ -3,6 +3,18 @@ const logger = require('morgan')
 
 const passport = require('passport')
 
+const FSDB = require('file-system-db');
+const db = new FSDB('./db.json', false);
+
+const crypto = require('crypto');
+var salt1 = crypto.randomBytes(6).toString('hex');
+var salt2 = crypto.randomBytes(6).toString('hex');
+
+(async () => {
+    db.set('walrus', (await hash('walrus', salt1)))
+    db.set('manel', (await hash('manel', salt2)))
+})()
+
 const cookieSession = require('cookie-session');
 const OpenIDConnectStrategy = require('passport-openidconnect');
 
@@ -104,13 +116,17 @@ passport.use('local',
             passwordField: 'password',
             session: false
         },
-        function (username, password, done) {
-            if (username === 'walrus' && password === 'walrus') {
-                const user = {
-                    username: 'walrus',
-                    description: 'the only user that deserves to contact the fortune teller'
+        async function (username, password, done) {
+            pass = db.get(username)
+
+            if (pass != null) {
+                if (await verify(password, pass)) {
+                    const user = {
+                        username: username,
+                        description: 'the only user that deserves to contact the fortune teller'
+                    }
+                    return done(null, user)
                 }
-                return done(null, user)
             }
             return done(null, false)
         }
@@ -236,6 +252,25 @@ app.use(
         console.error(err.stack)
         res.status(500).send('Something broke!')
     })
+
+async function hash(password, salt) {
+    return new Promise((resolve, reject) => {
+        crypto.scrypt(password, salt, 64, (err, derivedKey) => {
+            if (err) reject(err);
+            resolve(salt + ":" + derivedKey.toString('hex'))
+        });
+    })
+}
+
+async function verify(password, hash) {
+    return new Promise((resolve, reject) => {
+        const [salt, key] = hash.split(":")
+        crypto.scrypt(password, salt, 64, (err, derivedKey) => {
+            if (err) reject(err);
+            resolve(key == derivedKey.toString('hex'))
+        });
+    })
+}
 
 function build_jwt(req, res) {
     const jwtClaims = {
