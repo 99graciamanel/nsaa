@@ -192,14 +192,6 @@ app.get('/oidc/redirect/keycloak',
         res.redirect('/');
     });
 
-app.get('/logout',
-    passport.authenticate('jwt', {session: false}),
-    (req, res) => {
-        res.clearCookie('jwt');
-        res.redirect('/');
-        res.end();
-    })
-
 app.get('/login/google',
     passport.authenticate('oidc-google'));
 
