@@ -53,7 +53,7 @@ passport.use('oidc-keycloak',
     new OpenIDConnectStrategy(
         {
             issuer: 'http://localhost:8080/auth/realms/nsaa',
-            authorizationURL: 'http://localhost:8080/auth/realms/nsaa/protocol/openid-connect/auth"',
+            authorizationURL: 'http://localhost:8080/auth/realms/nsaa/protocol/openid-connect/auth',
             tokenURL: 'http://localhost:8080/auth/realms/nsaa/protocol/openid-connect/token',
             userInfoURL: 'http://localhost:8080/auth/realms/nsaa/protocol/openid-connect/userinfo',
             clientID: process.env['KEYCLOAK_CLIENT_ID'],
@@ -61,9 +61,9 @@ passport.use('oidc-keycloak',
             callbackURL: 'https://localhost:8443/oidc/redirect/keycloak'
         },
         function (issuer, profile, done) {
-            if (profile.displayName !== null) {
+            if (profile.username !== null) {
                 const user = {
-                    username: profile.displayName,
+                    username: profile.username,
                     description: 'the only user that deserves to contact the fortune teller'
                 }
                 return done(null, user)
@@ -83,7 +83,7 @@ passport.use('oidc-google',
             clientID: process.env['GOOGLE_CLIENT_ID'],
             clientSecret: process.env['GOOGLE_CLIENT_SECRET'],
             callbackURL: 'https://localhost:8443/oidc/redirect/google',
-            scope: [ 'profile' ]
+            scope: ['profile']
         },
         function (issuer, profile, done) {
             if (profile.displayName !== null) {
@@ -154,10 +154,9 @@ app.post('/login',
 app.get('/login/keycloak',
     passport.authenticate('oidc-keycloak'));
 
-app.get('/oidc/redirect/google',
+app.get('/oidc/redirect/keycloak',
     passport.authenticate('oidc-keycloak', {failureRedirect: '/login', session: false}),
     (req, res) => {
-        console.log(req.user.username)
         const jwtClaims = {
             sub: req.user.username,
             iss: 'localhost:8443',
@@ -191,7 +190,6 @@ app.get('/login/google',
 app.get('/oidc/redirect/google',
     passport.authenticate('oidc-google', {failureRedirect: '/login', session: false}),
     (req, res) => {
-        console.log(req.user.username)
         const jwtClaims = {
             sub: req.user.username,
             iss: 'localhost:8443',

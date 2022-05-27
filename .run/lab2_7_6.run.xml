@@ -1,10 +1,10 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="oidc" type="NodeJSConfigurationType" path-to-js-file="index.js" working-dir="$PROJECT_DIR$/lab2/oidc/express-app">
     <envs>
-      <env name="KEYCLOAK_CLIENT_ID" value="fortune-teller" />
-      <env name="KEYCLOAK_CLIENT_SECRET" value="RTUy9j4teCwadWB4kUFiCeDlZMnL7e2X" />
       <env name="GOOGLE_CLIENT_ID" value="580662669112-iren20altk7r3rfmreiuclt8om4bagsk.apps.googleusercontent.com" />
       <env name="GOOGLE_CLIENT_SECRET" value="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" />
+      <env name="KEYCLOAK_CLIENT_ID" value="fortune-teller" />
+      <env name="KEYCLOAK_CLIENT_SECRET" value="hhJ8g6TXVkmuRnQg0XlTeDB2TWkLUOWR" />
     </envs>
     <method v="2" />
   </configuration>
