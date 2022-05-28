@@ -1,6 +1,22 @@
 const express = require('express')
 const logger = require('morgan')
 
+const Client = require('node-radius-client');
+const {
+    dictionaries: {
+        rfc2865: {
+            file,
+            attributes,
+        },
+    },
+} = require('node-radius-utils');
+const client = new Client({
+    host: '10.0.2.5',
+    dictionaries: [
+        file,
+    ],
+});
+
 const passport = require('passport')
 
 const FSDB = require('file-system-db');
@@ -76,7 +92,7 @@ passport.use('oidc-keycloak',
             if (profile.username !== null) {
                 const user = {
                     username: profile.username,
-                    description: 'the only user that deserves to contact the fortune teller'
+                    description: 'Keycloak user'
                 }
                 return done(null, user)
             }
@@ -101,13 +117,35 @@ passport.use('oidc-google',
             if (profile.displayName !== null) {
                 const user = {
                     username: profile.displayName,
-                    description: 'the only user that deserves to contact the fortune teller'
+                    description: 'Google user'
                 }
                 return done(null, user)
             }
             return done(null, false)
         }
     ));
+
+passport.use('register',
+    new LocalStrategy(
+        {
+            usernameField: 'username',
+            passwordField: 'password',
+            session: false
+        },
+        async function (username, password, done) {
+            pass = db.get(username)
+            if (pass === null) {
+                salt = crypto.randomBytes(6).toString('hex');
+                db.set(username, (await hash(password, salt)))
+                const user = {
+                    username: username,
+                    description: 'Local user'
+                }
+                return done(null, user)
+            }
+            return done(null, false)
+        }
+    ))
 
 passport.use('local',
     new LocalStrategy(
@@ -123,10 +161,36 @@ passport.use('local',
                 if (await verify(password, pass)) {
                     const user = {
                         username: username,
-                        description: 'the only user that deserves to contact the fortune teller'
+                        description: 'Local user'
                     }
                     return done(null, user)
                 }
+            }
+            return done(null, false)
+        }
+    ))
+
+passport.use('local-radius',
+    new LocalStrategy(
+        {
+            usernameField: 'username',
+            passwordField: 'password',
+            session: false
+        },
+        async function (username, password, done) {
+            let result = await client.accessRequest({
+                secret: 'hello1234',
+                attributes: [
+                    [attributes.USER_NAME, username],
+                    [attributes.USER_PASSWORD, password],
+                ],
+            })
+            if (result.code === 'Access-Accept') {
+                const user = {
+                    username: username,
+                    description: 'Radius user'
+                }
+                return done(null, user)
             }
             return done(null, false)
         }
@@ -154,13 +218,39 @@ passport.use('jwt',
 
 app.use(passport.initialize())
 
+app.get('/register',
+    (req, res) => {
+        res.sendFile('register.html', {root: __dirname})
+    })
+
 app.get('/login',
     (req, res) => {
         res.sendFile('login.html', {root: __dirname})
     })
 
+app.get('/login/radius',
+    (req, res) => {
+        res.sendFile('login_radius.html', {root: __dirname})
+    })
+
+app.post('/register',
+    passport.authenticate('register', {failureRedirect: '/login', session: false}),
+    (req, res) => {
+        build_jwt(req, res)
+        res.redirect('/')
+    }
+)
+
 app.post('/login',
     passport.authenticate('local', {failureRedirect: '/login', session: false}),
+    (req, res) => {
+        build_jwt(req, res)
+        res.redirect('/')
+    }
+)
+
+app.post('/login-radius',
+    passport.authenticate('local-radius', {failureRedirect: '/login', session: false}),
     (req, res) => {
         build_jwt(req, res)
         res.redirect('/')
