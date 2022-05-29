@@ -263,23 +263,8 @@ app.get('/login/keycloak',
 app.get('/oidc/redirect/keycloak',
     passport.authenticate('oidc-keycloak', {failureRedirect: '/login', session: false}),
     (req, res) => {
-        const jwtClaims = {
-            sub: req.user.username,
-            iss: 'localhost:8443',
-            aud: 'localhost:8443',
-            exp: Math.floor(Date.now() / 1000) + 604800, // 1 week (7×24×60×60=604800s) from now
-            role: 'user'
-        }
-
-        const token = jwt.sign(jwtClaims, jwtSecret)
-        res.cookie('jwt', token, {
-            httpOnly: false,
-            secure: false,
-        })
-
-        console.log(`Token sent. Debug at https://jwt.io/?value=${token}`)
-        console.log(`Token secret (for verifying the signature): ${jwtSecret.toString('base64')}`)
-        res.redirect('/');
+        build_jwt(req, res)
+        res.redirect('/')
     });
 
 app.get('/login/google',
@@ -288,23 +273,8 @@ app.get('/login/google',
 app.get('/oidc/redirect/google',
     passport.authenticate('oidc-google', {failureRedirect: '/login', session: false}),
     (req, res) => {
-        const jwtClaims = {
-            sub: req.user.username,
-            iss: 'localhost:8443',
-            aud: 'localhost:8443',
-            exp: Math.floor(Date.now() / 1000) + 604800, // 1 week (7×24×60×60=604800s) from now
-            role: 'user'
-        }
-
-        const token = jwt.sign(jwtClaims, jwtSecret)
-        res.cookie('jwt', token, {
-            httpOnly: false,
-            secure: false,
-        })
-
-        console.log(`Token sent. Debug at https://jwt.io/?value=${token}`)
-        console.log(`Token secret (for verifying the signature): ${jwtSecret.toString('base64')}`)
-        res.redirect('/');
+        build_jwt(req, res)
+        res.redirect('/')
     });
 
 app.get('/logout',
