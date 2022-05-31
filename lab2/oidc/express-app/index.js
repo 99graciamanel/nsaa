@@ -158,6 +158,7 @@ passport.use('local',
             pass = db.get(username)
 
             if (pass != null) {
+                console.log(username)
                 if (await verify(password, pass)) {
                     const user = {
                         username: username,
@@ -319,6 +320,7 @@ async function verify(password, hash) {
         const [salt, key] = hash.split(":")
         crypto.scrypt(password, salt, 64, (err, derivedKey) => {
             if (err) reject(err);
+            console.log(derivedKey.toString('hex'))
             resolve(key == derivedKey.toString('hex'))
         });
     })

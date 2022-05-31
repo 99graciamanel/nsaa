@@ -1,3 +1,5 @@
+"manel" SSHA2-512-Password := "IfGi+zEYrWKpz23Ra6BSNB/fe2N77deKw4tf/A7cQpp4cGzV37IvXNuY/6nVVG4Si7F4snq9nby+eR/l35rBym0ITdA="
+
 "alice" Cleartext-Password := "hello1234"
 
 # Generated with "smbencrypt 'hello1234'"
